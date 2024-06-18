@@ -8,6 +8,10 @@ from mpl_toolkits.mplot3d import Axes3D
 import csv
 import matplotlib.colors as mcolors
 
+def triangle_wave(x, period=2*np.pi):
+    """ Generate a triangle wave with a given period. """
+    return 2 * np.abs(2 * (x / period - np.floor(x / period + 0.5))) - 1
+
 def update_plot(event=None):
     global inner_lines
     num_turns = num_turns_slider.get()
@@ -15,7 +19,8 @@ def update_plot(event=None):
     end_phi = end_phi_slider.get()
     radius = radius_slider.get()
     petal_color = petal_color_var.get()
-    
+    wave_type = wave_type_var.get()
+
     try:
         num_petals = float(num_petals_entry.get())
     except ValueError:
@@ -29,14 +34,18 @@ def update_plot(event=None):
     theta = np.linspace(0, num_turns * 2 * np.pi, 1000)
     phi = np.linspace(start_phi, end_phi, 1000)  # 開始立体角と終了立体角を指定
 
-    # 花びらの形状を定義
-    r = radius * ((1.0/1.3) + (0.3/1.3) * np.sin(num_petals * theta))
+    if wave_type == "sin":
+        r = radius * ((1.0/1.3) + (0.3/1.3) * np.sin(num_petals * theta))
+    elif wave_type == "square":
+        r = radius * ((1.0/1.3) + (0.3/1.3) * np.sign(np.sin(num_petals * theta)))
+    elif wave_type == "triangle":
+        r = radius * ((1.0/1.3) + (0.3/1.3) * triangle_wave(num_petals * theta))
+    
     r2d = r * np.sin(phi)
     x = r2d * np.cos(theta)
     y = r2d * np.sin(theta)
     z = r * np.cos(phi)
 
-    # 各視点でのプロットを作成
     for ax, elev, azim in zip(axes, elevations, azimuths):
         ax.clear()
         ax.plot(x, y, z, color=petal_color, alpha=0.5)  # 軌道を半透明に設定
@@ -46,21 +55,18 @@ def update_plot(event=None):
         ax.set_xlim([-radius-0.2, radius+0.2])
         ax.set_ylim([-radius-0.2, radius+0.2])
         ax.set_zlim([-radius-0.2, radius+0.2])
-        ax.set_aspect('auto')  # 等しいスケーリングを設定
+        ax.set_box_aspect([1, 1, 1])  # 等しいスケーリングを設定
         ax.view_init(elev=elev, azim=azim)
     inner_lines = None
     canvas.draw_idle()
     
-    # データを保存
     global data
     data = []
     r_val = 0  # 離弁花モードでは旋回半径は0
     r_color, g_color, b_color = mcolors.to_rgb(petal_color)
     
-    # メタデータ
     data.append([r_val, num_turns, '', '', '', '', '', '', '', ''])
     
-    # 各データポイント
     for i in range(len(theta)):
         diff_yaw = theta[i]
         l_max = r[i]
@@ -79,7 +85,8 @@ def show_inner_lines():
     end_phi = end_phi_slider.get()
     radius = radius_slider.get()
     petal_color = petal_color_var.get()
-    
+    wave_type = wave_type_var.get()
+
     try:
         num_petals = float(num_petals_entry.get())
     except ValueError:
@@ -88,8 +95,13 @@ def show_inner_lines():
     theta = np.linspace(0, num_turns * 2 * np.pi, 1000)
     phi = np.linspace(start_phi, end_phi, 1000)  # 開始立体角と終了立体角を指定
 
-    # 花びらの形状を定義
-    r = radius * (1 + 0.3 * np.sin(num_petals * theta))
+    if wave_type == "sin":
+        r = radius * ((1.0/1.3) + (0.3/1.3) * np.sin(num_petals * theta))
+    elif wave_type == "square":
+        r = radius * ((1.0/1.3) + (0.3/1.3) * np.sign(np.sin(num_petals * theta)))
+    elif wave_type == "triangle":
+        r = radius * ((1.0/1.3) + (0.3/1.3) * triangle_wave(num_petals * theta))
+    
     r2d = r * np.sin(phi)
     x = r2d * np.cos(theta)
     y = r2d * np.sin(theta)
@@ -162,6 +174,10 @@ color_button = tk.Button(control_frame, text="Choose Petal Color", command=choos
 color_button.pack(side=tk.LEFT)
 
 petal_color_var = tk.StringVar(value='blue')
+
+wave_type_var = tk.StringVar(value='sin')
+wave_type_menu = tk.OptionMenu(control_frame, wave_type_var, "sin", "square","triangle", command=update_plot)
+wave_type_menu.pack(side=tk.LEFT)
 
 show_button = tk.Button(control_frame, text="Show Inner Lines", command=show_inner_lines)
 show_button.pack(side=tk.LEFT)
