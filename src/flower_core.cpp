@@ -9,6 +9,8 @@
 #include <vector>
 #include <string>
 #include <ros/package.h>  // Include this header for ros::package::getPath
+#include <thread>  // for std::this_thread::sleep_for
+#include <chrono>  // for std::chrono::seconds
 
 class FlowerCore {
 public:
@@ -23,10 +25,11 @@ public:
         sound_command_pub = nh.advertise<std_msgs::Int16>("sound_command", 10);
         led_command_pub = nh.advertise<std_msgs::Float32MultiArray>("led_command", 10);
         robot_command_pub = nh.advertise<geometry_msgs::Vector3>("robot_command", 10);
-
+        ros::Duration(2.0).sleep();
         // CSV file processing
         readDesignCSV();
         processCSVData();
+        ros::Duration(2.0).sleep();
         performanceFirstSetup();
     }
 
@@ -106,8 +109,9 @@ public:
         }
 
         // Print the arrays to the console
-        ROS_INFO("Sequence Meta Data:");
+        // ROS_INFO("Sequence Meta Data:");
         float last_r = 0;
+        std::cout<<"sequence_meta : "<<sequence_meta.size()<<std::endl;
         for (const auto& meta : sequence_meta) {
             ROS_INFO("r: %f, n: %f", meta[0], meta[1]);
             if (meta[0] - last_r > 0.01) robot_command_array.push_back({0, meta[0] - last_r,0}); //直進
@@ -115,144 +119,224 @@ public:
             last_r = meta[0];
         }
 
-        ROS_INFO("Performance Data:");
+        // ROS_INFO("Performance Data:");
         for (const auto& data : performance_array) {
             std::ostringstream oss;
             for (const auto& val : data) {
                 oss << val << ", ";
             }
-            ROS_INFO("%s", oss.str().c_str());
+            // ROS_INFO("%s", oss.str().c_str());
         }
 
         // Print the step sizes
-        ROS_INFO("Step Sizes:");
+        // ROS_INFO("Step Sizes:");
         for (const auto& size : step_sizes) {
-            ROS_INFO("%d", size);
+            // ROS_INFO("%d", size);
         }
     }
 
 
     void performanceFirstSetup() {
+        std::cout<<"sequence:"<<sequence<<std::endl;
         //LED指令
         std_msgs::Float32MultiArray led_command;
         led_command.data.clear();
-        led_command.data.push_back(performance_array[0][4]);
-        led_command.data.push_back(performance_array[0][5]);
-        led_command.data.push_back(performance_array[0][6]);
-        led_command.data.push_back(performance_array[0][7]);
-        led_command.data.push_back(performance_array[0][8]);
-        led_command.data.push_back(performance_array[0][9]);
-        led_command.data.push_back(performance_array[0][10]);
+        led_command.data.push_back(0.0f);
+        led_command.data.push_back(0.0f);
+        led_command.data.push_back(0.0f);
+        led_command.data.push_back(0.0f);
+        led_command.data.push_back(0.0f);
+        led_command.data.push_back(0.0f);
+        led_command.data.push_back(0.0f);
         led_command_pub.publish(led_command);
 
         //サーボ指令(負)
         std_msgs::Float32 phi;
-        phi.data = -performance_array[0][3];
+        phi.data = M_PI+performance_array[0][1];
         phi_pub.publish(phi);
+        std::cout<<"first_phi:"<<phi<<std::endl;
+        // std::cout<<"last_phi"<<std::endl;
 
         //robot_endをtrueに
         robot_end = true;
     }
 
     void servoEndCallback(const std_msgs::Bool::ConstPtr& msg) {
+        std::cout<<"sequence:"<<sequence<<std::endl;
+        std::cout<<"servo_end"<<std::endl;
         if(robot_end==false) servo_end = true;
         else {
-            // robot_endが1ならシーケンスを1進めてrobot_endとserbo_endをfalseに
-            sequence++;
-            robot_end = false;
-            // ロボットに指定を出す
-            geometry_msgs::Vector3 robot_command;
-            robot_command.x = robot_command_array[sequence-1][0];
-            robot_command.y = robot_command_array[sequence-1][1];
-            robot_command.z = robot_command_array[sequence-1][2];
-            robot_command_pub.publish(robot_command);
-            if(sequence%2>0.5){//旋回シーケンス
-                //やることなし
-            }
-            else{//直進シーケンス
-                // LED消す
-                std_msgs::Float32MultiArray led_command;
-                led_command.data.clear();
-                led_command.data.push_back(0.0f);
-                led_command.data.push_back(0.0f);
-                led_command.data.push_back(0.0f);
-                led_command.data.push_back(0.0f);
-                led_command.data.push_back(0.0f);
-                led_command.data.push_back(0.0f);
-                led_command.data.push_back(0.0f);
-                led_command_pub.publish(led_command);
-                // サーボに負の値で指令を出す
-                std_msgs::Float32 phi;
-                phi.data = -performance_array[sequence/2*step_sizes[sequence/2]][3];
-                phi_pub.publish(phi);
+            if(1/*end_meta_id != sequence/2*/){
+                // end_meta_id = sequence/2;
+                // robot_endが1ならシーケンスを1進めてrobot_endとserbo_endをfalseに
+                sequence++;
+                std::cout<<"sequence++ : "<<sequence-1<<" → "<<sequence<<std::endl;
+                // 終了判定
+                if(sequence<sequence_meta.size()*2){
+                    robot_end = false;
+                    // ロボットに指定を出す
+                    geometry_msgs::Vector3 robot_command;
+                    robot_command.x = robot_command_array[sequence-1][0];
+                    robot_command.y = robot_command_array[sequence-1][1];
+                    robot_command.z = robot_command_array[sequence-1][2];
+                    robot_command_pub.publish(robot_command);
+                    if(sequence%2>0.5){//旋回シーケンス
+                        //やることなし
+                    }
+                    else{//直進シーケンス
+                        // LED消す
+                        std_msgs::Float32MultiArray led_command;
+                        led_command.data.clear();
+                        led_command.data.push_back(0.0f);
+                        led_command.data.push_back(0.0f);
+                        led_command.data.push_back(0.0f);
+                        led_command.data.push_back(0.0f);
+                        led_command.data.push_back(0.0f);
+                        led_command.data.push_back(0.0f);
+                        led_command.data.push_back(0.0f);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        // サーボに負の値で指令を出す
+                        std_msgs::Float32 phi;
+                        phi.data = M_PI+performance_array[(sequence/2)*step_sizes[(sequence/2)]][1];
+                        // std::cout<<"last_phi"<<std::endl;
+                        phi_pub.publish(phi);
+
+                    }
+                }
+                else std::cout<<"all_end"<<std::endl;
             }
         }
     }
 
     void robotEndCallback(const std_msgs::Bool::ConstPtr& msg) {
+        std::cout<<"sequence:"<<sequence<<std::endl;
+        std::cout<<"robot_end"<<std::endl;
         if(servo_end==false) robot_end = true;
         else{ 
-            // servo_endが1ならシーケンスを1進めてrobot_endとserbo_endをfalseに
-            sequence++;
-            servo_end = false;
-            // ロボットに指定を出す
-            geometry_msgs::Vector3 robot_command;
-            robot_command.x = robot_command_array[sequence-1][0];
-            robot_command.y = robot_command_array[sequence-1][1];
-            robot_command.z = robot_command_array[sequence-1][2];
-            robot_command_pub.publish(robot_command);
-            if(sequence%2>0.5){//旋回シーケンス
-                //やることなし
-            }
-            else{//直進シーケンス
-                // LED消す
-                std_msgs::Float32MultiArray led_command;
-                led_command.data.clear();
-                led_command.data.push_back(0.0f);
-                led_command.data.push_back(0.0f);
-                led_command.data.push_back(0.0f);
-                led_command.data.push_back(0.0f);
-                led_command.data.push_back(0.0f);
-                led_command.data.push_back(0.0f);
-                led_command.data.push_back(0.0f);
-                led_command_pub.publish(led_command);
-                // サーボに負の値で指令を出す
-                std_msgs::Float32 phi;
-                phi.data = -performance_array[sequence/2*step_sizes[sequence/2]][3];
-                phi_pub.publish(phi);
+            if(1/*end_meta_id != sequence/2*/){
+                // end_meta_id = sequence/2;
+                // servo_endが1ならシーケンスを1進めてrobot_endとserbo_endをfalseに
+                sequence++;
+                std::cout<<"sequence++ : "<<sequence-1<<" → "<<sequence<<std::endl;
+                // 終了判定
+                if(sequence<sequence_meta.size()*2){
+                    servo_end = false;
+                    // ロボットに指定を出す
+                    geometry_msgs::Vector3 robot_command;
+                    robot_command.x = robot_command_array[sequence-1][0];
+                    robot_command.y = robot_command_array[sequence-1][1];
+                    robot_command.z = robot_command_array[sequence-1][2];
+                    robot_command_pub.publish(robot_command);
+                    if(sequence%2>0.5){//旋回シーケンス
+                        //やることなし
+                    }
+                    else{//直進シーケンス
+                        // LED消す
+                        std_msgs::Float32MultiArray led_command;
+                        led_command.data.clear();
+                        led_command.data.push_back(0.0f);
+                        led_command.data.push_back(0.0f);
+                        led_command.data.push_back(0.0f);
+                        led_command.data.push_back(0.0f);
+                        led_command.data.push_back(0.0f);
+                        led_command.data.push_back(0.0f);
+                        led_command.data.push_back(0.0f);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        led_command_pub.publish(led_command);
+                        // サーボに負の値で指令を出す
+                        std_msgs::Float32 phi;
+                        phi.data = M_PI+performance_array[(sequence/2)*step_sizes[(sequence/2)]][1];
+                        // std::cout<<"last_phi"<<std::endl;
+                        phi_pub.publish(phi);
+                    }
+                }
+                else std::cout<<"all_end"<<std::endl;
             }
         }
     }
 
     void diffYawCallback(const std_msgs::Float32::ConstPtr& msg) {
-        if(sequence%2>0.5){// 旋回シーケンスなら実行
+        if(sequence%2>0.5&&sequence<sequence_meta.size()*2){// 旋回シーケンスなら実行
+            // std::cout<<"diffYaw"<<std::endl;
             // ステップidの更新
             float diff_yaw = msg->data;
             int current_step = 0;
-            int look_ahead = 3;
-            for(int step = 0; step < step_sizes[sequence/2]; step++){
-                if(diff_yaw<performance_array[sequence/2*step_sizes[sequence/2]+step][2]){
+            int look_ahead = 0;
+            for(int step = 0; step < step_sizes[(sequence/2)]; step++){
+                if(diff_yaw<performance_array[(sequence/2)*step_sizes[(sequence/2)]+step][0]){
                     current_step = step + look_ahead;
-                    if(current_step >= step_sizes[sequence/2]) current_step = step_sizes[sequence/2]-1;
+                    if(current_step >= step_sizes[(sequence/2)]) current_step = step_sizes[(sequence/2)]-1;
                     break;
                 }
             }
 
             // ステップに応じたperformanceのpublish
             std_msgs::Float32 phi;
-            phi.data = performance_array[sequence/2*step_sizes[sequence/2]+current_step][3];
-            phi_pub.publish(phi);
+            if(current_step == step_sizes[(sequence/2)]-1) {//最終コマンド
+                if(end_turn_id != sequence/2){//各シーケンスで最初のみエンド信号付き
+                    phi.data = M_PI + performance_array[(sequence/2)*step_sizes[(sequence/2)]+current_step][1];
+                    end_turn_id = sequence/2;
+                    // std::cout<<"last_phi"<<std::endl;
+                    // std::cout << "phi : " << phi.data << std::endl;
+                    phi_pub.publish(phi);
 
-            std_msgs::Float32MultiArray led_command;
-            led_command.data.clear();
-            led_command.data.push_back(performance_array[sequence/2*step_sizes[sequence/2]+current_step][4]);
-            led_command.data.push_back(performance_array[sequence/2*step_sizes[sequence/2]+current_step][5]);
-            led_command.data.push_back(performance_array[sequence/2*step_sizes[sequence/2]+current_step][6]);
-            led_command.data.push_back(performance_array[sequence/2*step_sizes[sequence/2]+current_step][7]);
-            led_command.data.push_back(performance_array[sequence/2*step_sizes[sequence/2]+current_step][8]);
-            led_command.data.push_back(performance_array[sequence/2*step_sizes[sequence/2]+current_step][9]);
-            led_command.data.push_back(performance_array[sequence/2*step_sizes[sequence/2]+current_step][10]);
-            led_command_pub.publish(led_command);
+                    std_msgs::Float32MultiArray led_command;
+                    led_command.data.clear();
+                    led_command.data.push_back(0.0f);
+                    led_command.data.push_back(0.0f);
+                    led_command.data.push_back(0.0f);
+                    led_command.data.push_back(0.0f);
+                    led_command.data.push_back(0.0f);
+                    led_command.data.push_back(0.0f);
+                    led_command.data.push_back(0.0f);
+                    led_command_pub.publish(led_command);
+                    led_command_pub.publish(led_command);
+                    led_command_pub.publish(led_command);
+                    led_command_pub.publish(led_command);
+                    led_command_pub.publish(led_command);
+                    led_command_pub.publish(led_command);
+                    led_command_pub.publish(led_command);
+                    led_command_pub.publish(led_command);
+                    led_command_pub.publish(led_command);
+                    led_command_pub.publish(led_command);
+                }
+            }
+            else {//普段のコマンド
+                phi.data = performance_array[(sequence/2)*step_sizes[(sequence/2)]+current_step][1];
+                // std::cout << "phi : " << phi.data << std::endl;
+                // std::cout << "phi : " << phi.data << std::endl;
+                phi_pub.publish(phi);
+
+                std_msgs::Float32MultiArray led_command;
+                led_command.data.clear();
+                led_command.data.push_back(performance_array[(sequence/2)*step_sizes[(sequence/2)]+current_step][2]);
+                led_command.data.push_back(performance_array[(sequence/2)*step_sizes[(sequence/2)]+current_step][3]);
+                led_command.data.push_back(performance_array[(sequence/2)*step_sizes[(sequence/2)]+current_step][4]);
+                led_command.data.push_back(performance_array[(sequence/2)*step_sizes[(sequence/2)]+current_step][5]);
+                led_command.data.push_back(performance_array[(sequence/2)*step_sizes[(sequence/2)]+current_step][6]);
+                led_command.data.push_back(performance_array[(sequence/2)*step_sizes[(sequence/2)]+current_step][7]);
+                led_command.data.push_back(performance_array[(sequence/2)*step_sizes[(sequence/2)]+current_step][8]);
+                led_command_pub.publish(led_command);
+            }
+
+
 
             // std_msgs::Int16 sound_command;
             // sound_command.data = ...;
@@ -279,6 +363,8 @@ private:
     bool robot_end = false;
     bool servo_end = false;
     int sequence = 0;
+    int end_turn_id = -1;
+    int end_meta_id = -1;
     float led_setup[7];
 };
 

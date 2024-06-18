@@ -30,7 +30,7 @@ def update_plot(event=None):
     phi = np.linspace(start_phi, end_phi, 1000)  # 開始立体角と終了立体角を指定
 
     # 花びらの形状を定義
-    r = radius * (1 + 0.3 * np.sin(num_petals * theta))
+    r = radius * ((1.0/1.3) + (0.3/1.3) * np.sin(num_petals * theta))
     r2d = r * np.sin(phi)
     x = r2d * np.cos(theta)
     y = r2d * np.sin(theta)
@@ -46,7 +46,7 @@ def update_plot(event=None):
         ax.set_xlim([-radius-0.2, radius+0.2])
         ax.set_ylim([-radius-0.2, radius+0.2])
         ax.set_zlim([-radius-0.2, radius+0.2])
-        ax.set_box_aspect([1, 1, 1])  # 等しいスケーリングを設定
+        ax.set_aspect('auto')  # 等しいスケーリングを設定
         ax.view_init(elev=elev, azim=azim)
     inner_lines = None
     canvas.draw_idle()
